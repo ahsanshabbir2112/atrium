@@ -1,0 +1,88 @@
+# Week 3 record
+
+Your name: Ahsan Shabbir
+Date: 10/12/2026
+
+## 1. The finding I choose
+
+State which of the three the tool reported.
+
+- File: src/handlers/directory.js
+- Line: 8-11
+- What the tool said about it:
+  This SQL statement is built by joining pieces of text together. If any of those pieces came from outside the application, the database will read it as part of the command rather than as a value.
+
+## 2. What an assistant told me
+
+Say which assistant you asked, and what it said in a sentence or two.
+
+- Assistant used: GitHub Copilot
+- Its explanation, in your own words:
+  It said the app was taking the search term straight from the query string and inserting it into a SQL LIKE clause, so an attacker could break out of the quoted string and alter the WHERE condition.
+- One thing it asserted that I had not verified at that point:
+  It said a payload such as ' OR 1=1 -- would make the query return every staff record, which I had not checked yet.
+
+## 3. What the code shows
+
+Answer all four. If you cannot answer one, say so.
+
+**Where does the data come from?**
+The data comes from the `q` query parameter on the `/directory` page. In `showDirectory`, it reads `const q = typeof req.query.q === "string" ? req.query.q : "";`.
+
+**What happens to it on the way?**
+The value is passed into `searchDirectory(db, q)`, where it is concatenated directly into the SQL string:
+`"WHERE display_name LIKE '%" + q + "%' OR department LIKE '%" + q + "%'"`.
+Then the code runs `db.prepare(sql).all();` against the database.
+
+**Where does it become dangerous?**
+It becomes dangerous when the input contains SQL syntax, especially quote characters. A value like `' OR 1=1 --` closes the string early and changes the logic so that the database evaluates `OR 1=1`, which makes the condition always true.
+
+**What stands in the way?**
+Nothing in this handler prevents the user input from being treated as SQL. There is no validation or escaping, and no prepared statement using `?` placeholders. The code is relying on raw string concatenation instead of bound parameters.
+
+## 4. What the running application shows
+
+Record both. A single result on its own proves nothing.
+
+**Ordinary case**
+
+- What I entered: Keane
+- What came back: The page showed only Bob Keane as a result.
+
+**The case I was testing for**
+
+- What I entered: ' OR 1=1 --
+- What came back: The page showed all three colleagues: Alice Nolan, Bob Keane, and Morgan Doyle.
+- How this differs from the ordinary case:
+  Instead of narrowing the list to a matching name or department, the injected input caused the query to match every row in the `users` table.
+
+## 5. My answer
+
+Delete the two that do not apply.
+
+**Real** / **Not real** / **Not settled**
+
+**Why, in two or three sentences.** Write for somebody who has not seen any of this.
+This is a real SQL injection bug. The search field passes user text straight into an SQL query without binding it as a value, so a crafted input can change what the database checks. I confirmed it by sending a malicious search string and seeing the application return all staff records instead of only matching ones.
+
+**What would change my mind.** If new information showed that the input was sanitized or bound as a parameter before running the query, or if the route were rebuilt to reject quotes and SQL syntax, I would reconsider this conclusion.
+
+**How far this answer reaches.** What you established applies to a particular page,
+a particular set of data and this version of the application. Say what you have
+shown, and be careful not to claim more.
+This demonstrates the issue on the staff directory search page in this version of Atrium, using the seeded user records. It shows that a crafted `q` value can alter the SQL on that route, but it does not prove every page or API in the app is vulnerable in the same way.
+
+## 6. Back to the assistant
+
+The thing you noted in section 2, that you had not verified at the time.
+
+- Did I check it? Yes.
+- Was it right? Yes. The malicious input did return all staff records.
+
+---
+
+## Optional, if you had time
+
+The other two findings matched the same rule. Why are they not the same situation?
+Two sentences.
+The other two findings are not the same situation because they are not taking user-controlled data into a raw SQL string. In `src/db/reset.js`, the inserted values are bound by placeholders, and in `src/handlers/resources.js`, the `:id` value is passed as a parameter with `?` rather than concatenated into the query.
